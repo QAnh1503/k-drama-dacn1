@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect} from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,52 +19,82 @@ const platforms = [
 ]
 
 interface PredictionResult {
-  rating: number
-  trend: "HIGH" | "MEDIUM" | "LOW"
-  factors: { name: string; impact: number }[]
+  rating: number;
+  trend: "HIGH" | "MEDIUM" | "LOW";
+  factors: { 
+    name: string; 
+    value: string | number; // Giá trị hiển thị (VD: "10,000" hoặc "95%")
+    rawImpact: number;      // Giá trị % để chạy thanh progress bar (0-100)
+  }[];
 }
 
 export default function PredictPage() {
+
+// Recommend actors, diretors, screenwriters for user when inputing to predict
+  const [suggestions, setSuggestions] = useState({
+    actors: [],
+    directors: [],
+    screenwriters: []
+  });
+
+  // Gọi API lấy dữ liệu khi trang vừa load
+    useEffect(() => {
+      const fetchMetadata = async () => {
+        try {
+          const response = await fetch("http://localhost:8000/metadata");
+          const data = await response.json();
+          
+          // Gán dữ liệu từ API vào state suggestions
+          setSuggestions({
+            actors: data.actors || [],
+            directors: data.directors || [],
+            screenwriters: data.screenwriters || []
+          });
+        } catch (error) {
+          console.error("Error to get data from metadata:", error);
+        }
+      };
+
+      fetchMetadata();
+    }, []);
   
-  // const [formData, setFormData] = useState({
-  //   dramaName: "",
-  //   genre: "",
-  //   platform: "",
-  //   actors: "",     // Nhập dạng: Lee Min Ho, Gong Yoo
-  //   director: "",
-  //   writer: "",      // Mới
-  //   tags: "",        // Mới
-  //   content: "",     // Mới (Rất quan trọng cho TF-IDF)
-  //   episodes: "16",
-  //   duration: "60",  // Mới
-  //   year: "2026",
-  //   month: "5",      // Mới
-  //   ageRating: "15+" // Mới
-  // })
-  
-  
-  // SẴN DỮ LIỆU MẪU ĐỂ BẠN TEST NHANH
+      
   const [formData, setFormData] = useState({
-    dramaName: "The Moonlight Sonata",
-    genre: "Romance",
-    platform: "Netflix",
-    actors: "Kim Soo Hyun, Jun Ji Hyun", 
-    director: "Park Shin Woo",
-    writer: "Park Ji Eun",      
-    tags: "Contract Relationship, Rich Male Lead, Emotional",        
-    content: "A beautiful story about a pianist who loses his hearing and a violinist who helps him find his music again through a secret contract.", 
-    episodes: "16",
-    duration: "70",  
-    year: "2026",
-    month: "12",      
-    ageRating: "15+" 
+    dramaName: "",
+    genre: [] as string[],
+    platform: "",
+    actors: "",
+    directors: "",
+    screenwriters: "",
+    tags: "",
+    content: "",
+    episodes: "1",
+    duration: "60",
+    year: new Date().getFullYear().toString(),
+    month: "1",
+    ageRating: "15+"
   })
+
+  // SẴN DỮ LIỆU MẪU ĐỂ BẠN TEST NHANH
+  // const [formData, setFormData] = useState({
+  //   dramaName: "The Moonlight Sonata",
+  //   genre: ["Romance"],
+  //   platform: "Netflix",
+  //   actors: "Kim Soo Hyun, Jun Ji Hyun", 
+  //   directors: "Park Shin Woo",
+  //   screenwriters: "Park Ji Eun",      
+  //   tags: "Contract Relationship, Rich Male Lead, Emotional",        
+  //   content: "A beautiful story about a pianist who loses his hearing and a violinist who helps him find his music again through a secret contract.", 
+  //   episodes: "16",
+  //   duration: "70",  
+  //   year: "2026",
+  //   month: "12",      
+  //   ageRating: "15+" 
+  // })
 
   const [prediction, setPrediction] = useState<PredictionResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-
-  // const handlePredict = async () => {
-  //   setIsLoading(true)
+  //  setIsLoading(true)
   //   // Simulate AI prediction
   //   await new Promise(resolve => setTimeout(resolve, 1500))
     
@@ -85,6 +115,8 @@ export default function PredictPage() {
   //   })
   //   setIsLoading(false)
   // }
+  // const handlePredict = async () => {
+  //
   const handlePredict = async () => {
     if (!formData.dramaName || !formData.content) {
       alert("Vui lòng nhập tên phim và nội dung tóm tắt!");
@@ -94,7 +126,7 @@ export default function PredictPage() {
     setIsLoading(true);
     try {
       // Tách tên diễn viên từ chuỗi nhập vào
-      const actorList = formData.actors.split(",").map(a => a.trim());
+      const actorList = formData.actors.split(",").map(a => a.trim()).filter(a => a !== ""); // Sau đó gửi actorList[0] || "Unknown"
       
       const response = await fetch("http://localhost:8000/predict", {
         method: "POST",
@@ -105,9 +137,9 @@ export default function PredictPage() {
           title: formData.dramaName,
           main_lead1: actorList[0] || "Unknown",
           main_lead2: actorList[1] || "Unknown",
-          directors: formData.director,
-          screenwriters: formData.writer || "Unknown",
-          genres: formData.genre,
+          directors: formData.directors,
+          screenwriters: formData.screenwriters || "Unknown",
+          genres: formData.genre.join(", "),
           tags: formData.tags,
           content: formData.content,
           episodes: parseInt(formData.episodes),
@@ -127,19 +159,30 @@ export default function PredictPage() {
         rating: result.predicted_rating,
         trend: result.popularity_rank <= 500 ? "HIGH" : (result.popularity_rank <= 1500 ? "MEDIUM" : "LOW"),
         factors: [
-          // { name: "Dự kiến người xem (Watchers)", impact: Math.min(Math.round((result.predicted_watchers / 100000) * 100), 100) },
-          { name: "Lượt xem dự kiến", impact: Math.min(Math.round((result.predicted_watchers / 50000) * 100), 100) },
-          { name: "Thứ hạng phổ biến (Rank)", impact: Math.max(100 - Math.round(result.popularity_rank / 50), 5) },
-          { name: "Độ Hot", impact: result.popularity_level.includes("HOT") ? 95 : 50 }
+          { 
+            name: "Predict expected viewership", 
+            value: result.predicted_watchers.toLocaleString() + " viewers",
+            rawImpact: Math.min(Math.round((result.predicted_watchers / 50000) * 100), 100) 
+          },
+          { 
+            name: "Predict popularity", 
+            value: result.popularity_level, 
+            rawImpact: result.popularity_level.includes("HOT") ? 95 : 60
+          },
+          { 
+            name: "Popularity score", 
+            value: Math.max(100 - Math.round(result.popularity_rank / 50), 5), // Giữ giá trị % như cũ
+            rawImpact: Math.max(100 - Math.round(result.popularity_rank / 50), 5) 
+          }
         ]
       });
     } catch (error) {
-      console.error("Error:", error);
-      alert("Lỗi kết nối Backend! Hãy đảm bảo file main.py đang chạy.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        console.error("Error:", error);
+        alert("Error connecting to Backend!");
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
   const getTrendColor = (trend: string) => {
     switch (trend) {
@@ -194,19 +237,43 @@ export default function PredictPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Genre</Label>
-                  <Select
-                    value={formData.genre}
-                    onValueChange={(value) => setFormData({ ...formData, genre: value })}
-                  >
-                    <SelectTrigger className="bg-input">
-                      <SelectValue placeholder="Select genre..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {genres.map((genre) => (
-                        <SelectItem key={genre} value={genre}>{genre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {formData.genre.length > 0 ? (
+                      formData.genre.map((g) => (
+                        <span key={g} className="bg-primary/20 text-primary text-[10px] px-2 py-0.5 rounded-full">
+                          {g}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">No genre selected</span>
+                    )}
+                  </div>
+
+                  {/* Danh sách Checkbox để chọn nhiều */}
+                  <div className="grid grid-cols-2 gap-2 p-3 border rounded-md bg-input max-h-[150px] overflow-y-auto">
+                    {genres.map((g) => (
+                      <div key={g} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={`genre-${g}`}
+                          checked={formData.genre.includes(g)}
+                          onChange={(e) => {
+                            const isChecked = e.target.checked;
+                            setFormData((prev) => ({ // Mở ngoặc ( cho function và { cho object
+                              ...prev,
+                              genre: isChecked
+                                ? [...prev.genre, g]
+                                : prev.genre.filter((item) => item !== g),
+                            })); // Đóng } cho object và ) cho function setFormData
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-primary accent-primary"
+                        />
+                        <label htmlFor={`genre-${g}`} className="text-sm cursor-pointer select-none">
+                          {g}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Platform</Label>
@@ -231,96 +298,120 @@ export default function PredictPage() {
                 <Label htmlFor="actors">Main Actors</Label>
                 <Input
                   id="actors"
+                  list="actors-list" // Connect to datalist
                   placeholder="Enter main actors (comma separated)..."
                   value={formData.actors}
                   onChange={(e) => setFormData({ ...formData, actors: e.target.value })}
                   className="bg-input"
                 />
+                <datalist id="actors-list">
+                  {suggestions.actors.map((name, i) => <option key={i} value={name} />)}
+                </datalist>
               </div>
 
               {/* Director */}
               <div className="space-y-2">
-                <Label htmlFor="director">Director</Label>
+                <Label htmlFor="directors">Directors</Label>
                 <Input
-                  id="director"
-                  placeholder="Enter director name..."
-                  value={formData.director}
-                  onChange={(e) => setFormData({ ...formData, director: e.target.value })}
+                  id="directors"
+                  list="directors-list"
+                  placeholder="Enter directors (comma separated)..."
+                  value={formData.directors}
+                  onChange={(e) => setFormData({ ...formData, directors: e.target.value })}
                   className="bg-input"
                 />
+                <datalist id="directors-list">
+                  {suggestions.directors.map((name, i) => <option key={i} value={name} />)}
+                </datalist>
               </div>
 
-              {/* Episodes & Year */}
+              {/* Screenwriters */}
+              <div className="space-y-2">
+                <Label htmlFor="screenwriters">Screenwriters</Label>
+                <Input
+                  id="screenwriters"
+                  list="screenwriters-list"
+                  placeholder="Enter writers (comma separated)..."
+                  value={formData.screenwriters}
+                  onChange={(e) => setFormData({ ...formData, screenwriters: e.target.value })}
+                  className="bg-input"
+                />
+                <datalist id="screenwriters-list">
+                  {suggestions.screenwriters.map((name, i) => <option key={i} value={name} />)}
+                </datalist>
+              </div>
+
+              {/* Episodes & Age Rating */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="episodes">Number of Episodes</Label>
                   <Input
                     id="episodes"
                     type="number"
+                    min="1" // Không cho phép nhập số nhỏ hơn 1
                     value={formData.episodes}
-                    onChange={(e) => setFormData({ ...formData, episodes: e.target.value })}
+                    onChange={(e) => {
+                      // Đảm bảo giá trị không âm nếu người dùng nhập tay
+                      const val = parseInt(e.target.value);
+                      setFormData({ ...formData, episodes: val < 1 ? "1" : e.target.value });
+                    }}
                     className="bg-input"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Age Rating</Label>
+                  <Select
+                    value={formData.ageRating}
+                    onValueChange={(value) => setFormData({ ...formData, ageRating: value })}
+                  >
+                    <SelectTrigger className="bg-input">
+                      <SelectValue placeholder="Select age rating..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["G", "13+", "15+", "18+"].map((rating) => (
+                        <SelectItem key={rating} value={rating}>{rating}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Release Month & Year trên cùng 1 hàng */}
+              <div className="grid gap-4 grid-cols-2"> 
+                <div className="space-y-2">
+                  <Label>Release Month</Label>
+                  <Select
+                    value={formData.month}
+                    onValueChange={(value) => setFormData({ ...formData, month: value })}
+                  >
+                    <SelectTrigger className="bg-input">
+                      <SelectValue placeholder="Month..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[
+                        "January", "February", "March", "April", "May", "June",
+                        "July", "August", "September", "October", "November", "December"
+                      ].map((monthName, i) => (
+                        <SelectItem key={i + 1} value={(i + 1).toString()}>
+                          {monthName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="year">Release Year</Label>
                   <Input
                     id="year"
                     type="number"
+                    min="1960" 
+                    max="2100"
                     value={formData.year}
                     onChange={(e) => setFormData({ ...formData, year: e.target.value })}
                     className="bg-input"
                   />
                 </div>
-              </div>
-              
-              {/* Thay thế Input Month bằng Select */}
-              <div className="space-y-2">
-                <Label>Release Month</Label>
-                <Select
-                  value={formData.month}
-                  onValueChange={(value) => setFormData({ ...formData, month: value })}
-                >
-                  <SelectTrigger className="bg-input">
-                    <SelectValue placeholder="Select month..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 12 }, (_, i) => (
-                      <SelectItem key={i + 1} value={(i + 1).toString()}>
-                        Tháng {i + 1}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Thay thế Input Age Rating bằng Select: */}
-              <div className="space-y-2">
-                <Label>Age Rating</Label>
-                <Select
-                  value={formData.ageRating}
-                  onValueChange={(value) => setFormData({ ...formData, ageRating: value })}
-                >
-                  <SelectTrigger className="bg-input">
-                    <SelectValue placeholder="Select age rating..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["G", "13+", "15+", "18+"].map((rating) => (
-                      <SelectItem key={rating} value={rating}>{rating}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Thêm ô nhập Biên kịch */}
-              <div className="space-y-2">
-                <Label htmlFor="writer">Screenwriter</Label>
-                <Input
-                  id="writer"
-                  placeholder="Enter screenwriter name..."
-                  value={formData.writer}
-                  onChange={(e) => setFormData({ ...formData, writer: e.target.value })}
-                />
               </div>
 
               {/* Thêm ô nhập Tags */}
@@ -412,17 +503,20 @@ export default function PredictPage() {
 
                   {/* Key Factors */}
                   <div className="space-y-4">
-                    <h4 className="font-semibold">Key Prediction Factors</h4>
+                    <h4 className="font-semibold text-lg border-b pb-2">Prediction factors</h4>
                     {prediction.factors.map((factor, index) => (
                       <div key={index} className="space-y-1">
-                        <div className="flex justify-between text-sm">
+                        <div className="flex justify-between items-center text-sm">
                           <span className="text-muted-foreground">{factor.name}</span>
-                          <span className="text-primary">{factor.impact}%</span>
+                          {/* Hiển thị giá trị: thêm % nếu là Độ Hot, còn lại giữ nguyên */}
+                          <span className="font-bold text-primary">
+                            {factor.name === "Popularity score" ? `${factor.value}%` : factor.value}
+                          </span>
                         </div>
                         <div className="h-2 overflow-hidden rounded-full bg-muted">
                           <div 
                             className="h-full rounded-full bg-primary transition-all duration-500"
-                            style={{ width: `${factor.impact}%` }}
+                            style={{ width: `${factor.rawImpact}%` }}
                           />
                         </div>
                       </div>

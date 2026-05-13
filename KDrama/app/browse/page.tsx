@@ -39,21 +39,24 @@ const userReviews = [
     username: "DramaFan2024",
     avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=50&h=50&fit=crop",
     comment: "Best K-drama I have ever watched! The chemistry between the leads is amazing.",
-    date: "January 15, 2024" 
+    date: "January 15, 2024",
+    rating: 8
   },
   {
     id: 2,
     username: "SeoulWatcher",
     avatar: "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=50&h=50&fit=crop",
     comment: "A perfect blend of romance, comedy, and political intrigue. Highly recommend!",
-    date: "January 10, 2024"
+    date: "January 10, 2024",
+    rating: 9
   },
   {
     id: 3,
     username: "KoreanDrama",
     avatar: "https://images.unsplash.com/photo-1599566150163-29194dcabd36?w=50&h=50&fit=crop",
     comment: "This drama made me laugh and cry. The supporting cast is also fantastic.",
-    date: "January 5, 2024"
+    date: "January 5, 2024", 
+    rating: 7.8
   },
 ]
 
@@ -289,242 +292,199 @@ export default function BrowsePage() {
         <DramaCarousel title="Thriller & Mystery" dramas={thrillerDramas} onDramaClick={handleDramaClick} />
       </div>
 
-      {/* Drama Detail Dialog */}
+    {/* Drama Detail Dialog - THAY THẾ TỪ DÒNG 318 ĐẾN 461 */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] bg-card border-border p-0 overflow-hidden">
+        {/* <DialogContent className="max-w-4xl h-full max-h-[90vh] bg-card border-border p-0 overflow-hidden flex flex-col"> */}
+        <DialogContent className="max-w-4xl w-[95vw] h-[90vh] bg-card border-border p-0 overflow-hidden flex flex-col">
           <DialogTitle className="sr-only">
             {selectedDrama?.title}
           </DialogTitle>
+          
           {selectedDrama && (
-            <ScrollArea className="max-h-[90vh]">
-              {/* Banner Image */}
-              <div className="relative aspect-video w-full">
-                <Image
-                  src={selectedDrama.imageUrl}
-                  alt={selectedDrama.title}
-                  fill
-                  className="object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-4 top-4 bg-black/50 hover:bg-black/70 text-white"
-                  onClick={() => setIsDialogOpen(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              <div className="p-6 space-y-6">
-                {/* Title & Info */}
-                <div>
-                  <h2 className="text-2xl font-bold">{selectedDrama.title}</h2>
-                  <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
-                      <span className="font-semibold text-yellow-500">{selectedDrama.rating}</span>
-                    </div>
-                    <span>{selectedDrama.year}</span>
-                    <span>{selectedDrama.episodes} Episodes</span>
-                    <span className="rounded bg-primary/20 px-2 py-0.5 text-primary">{selectedDrama.genre}</span>
-                  </div>
-                  {/* Stats: Likes & Reviews */}
-                  <div className="mt-3 flex items-center gap-6 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Heart className="h-4 w-4 text-primary" />
-                      <span><span className="font-semibold text-foreground">{selectedDrama.likes.toLocaleString()}</span> likes</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <MessageCircle className="h-4 w-4 text-primary" />
-                      <span><span className="font-semibold text-foreground">{selectedDrama.reviews.length}</span> reviews</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Description */}
-                <p className="text-muted-foreground leading-relaxed">
-                  {selectedDrama.description}
-                </p>
-
-                {/* Action Buttons */}
-                <div className="flex gap-3">
-                  <Button 
-                    variant={user && isLiked(selectedDrama.id) ? "default" : "outline"}
-                    onClick={handleLike}
-                    disabled={!user}
-                    className={user && isLiked(selectedDrama.id) ? "bg-primary" : ""}
+            /* ScrollArea chiếm toàn bộ chiều cao còn lại của Dialog */
+              <div className="flex-1 w-full overflow-y-auto custom-scrollbar">
+                     <div className="relative w-full">
+                {/* Banner Image */}
+                <div className="relative aspect-video w-full">
+                  <Image
+                    src={selectedDrama.imageUrl}
+                    alt={selectedDrama.title}
+                    fill
+                    className="object-cover"
+                    priority
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
+                  
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-4 top-4 z-50 bg-black/50 hover:bg-black/70 text-white rounded-full"
+                    onClick={() => setIsDialogOpen(false)}
                   >
-                    <Heart className={`mr-2 h-4 w-4 ${user && isLiked(selectedDrama.id) ? "fill-current" : ""}`} />
-                    {user && isLiked(selectedDrama.id) ? "Liked" : "Like"}
+                    <X className="h-4 w-4" />
                   </Button>
-                  {!user && (
-                    <span className="text-sm text-muted-foreground self-center">
-                      Login to like dramas
-                    </span>
-                  )}
                 </div>
-
-                {/* Trailer Section */}
-                <div>
-                  <h3 className="text-lg font-semibold text-primary mb-3">Trailer</h3>
-                  <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-black">
-                    <iframe
-                      src={selectedDrama.trailerUrl}
-                      title={`${selectedDrama.title} Trailer`}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      className="absolute inset-0 w-full h-full"
-                    />
-                  </div>
-                </div>
-
-                {/* Cast Section */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Cast</h3>
-                  <div className="flex flex-wrap gap-6">
-                    {selectedDrama.cast.map((member, index) => (
-                      <div key={index} className="flex flex-col items-center text-center">
-                        <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-muted">
-                          <Image
-                            src={member.image}
-                            alt={member.name}
-                            width={64}
-                            height={64}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                        <p className="mt-2 font-medium text-sm">{member.name}</p>
-                        <p className="text-xs text-muted-foreground">{member.role}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* User Reviews Section */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">User Reviews</h3>
-
-                  {/* Add Review Form */}
-                  {user ? (
-                    <div className="mb-6 p-4 rounded-lg bg-muted/50 border border-border">
-                      <p className="font-medium mb-3">Write a Review</p>
-                      
-                      {/* Star Rating */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-sm text-muted-foreground">Your Rating:</span>
-                        <div className="flex gap-1">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <button
-                              key={star}
-                              type="button"
-                              onClick={() => setUserRating(star)}
-                              onMouseEnter={() => setHoverRating(star)}
-                              onMouseLeave={() => setHoverRating(0)}
-                              className="transition-transform hover:scale-110"
-                            >
-                              <Star 
-                                className={`h-6 w-6 ${
-                                  (hoverRating || userRating) >= star 
-                                    ? "fill-yellow-500 text-yellow-500" 
-                                    : "text-muted-foreground"
-                                }`} 
-                              />
-                            </button>
-                          ))}
-                        </div>
-                        {userRating > 0 && (
-                          <span className="text-sm font-semibold text-yellow-500">{userRating}/5</span>
-                        )}
-                      </div>
-                      
-                      {/* Comment Input */}
-                      <Textarea
-                        placeholder="Share your thoughts about this drama..."
-                        value={userComment}
-                        onChange={(e) => setUserComment(e.target.value)}
-                        className="mb-3 bg-input resize-none"
-                        rows={3}
-                      />
-                      
-                      <Button 
-                        onClick={handleSubmitReview}
-                        disabled={!userComment.trim() || userRating === 0}
-                        className="bg-primary hover:bg-primary/90"
-                      >
-                        <Send className="mr-2 h-4 w-4" />
-                        Submit Review
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="mb-6 p-4 rounded-lg bg-muted/50 border border-border text-center">
-                      <p className="text-muted-foreground">
-                        Please <a href="/login" className="text-primary hover:underline">login</a> to write a review
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Reviews List */}
+                
+                {/* Nội dung chi tiết */}
+                <div className="p-6 space-y-8 pb-12">
+                  {/* Title & Info */}
                   <div className="space-y-4">
-                    {selectedDrama.reviews.map((review) => (
-                      <div key={review.id} className="flex gap-3">
-                        <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-muted">
-                          <Image
-                            src={review.avatar}
-                            alt={review.username}
-                            width={40}
-                            height={40}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{review.username}</p>
-                            {'rating' in review && (
-                              <div className="flex items-center gap-1">
-                                <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
-                                <span className="text-xs text-yellow-500">{review.rating}/5</span>
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">{review.comment}</p>
-                          <p className="text-xs text-primary mt-1">{review.date}</p>
-                        </div>
+                    <h2 className="text-3xl font-bold">{selectedDrama.title}</h2>
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
+                        <span className="font-semibold text-yellow-500">{selectedDrama.rating}</span>
                       </div>
-                    ))}
+                      <span>{selectedDrama.year}</span>
+                      <span>{selectedDrama.episodes} Episodes</span>
+                      <span className="rounded bg-primary/20 px-2 py-0.5 text-primary">{selectedDrama.genre}</span>
+                    </div>
+
+                    <div className="flex items-center gap-6 text-sm">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Heart className="h-4 w-4 text-primary" />
+                        <span><span className="font-semibold text-foreground">{selectedDrama.likes.toLocaleString()}</span> likes</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <MessageCircle className="h-4 w-4 text-primary" />
+                        <span><span className="font-semibold text-foreground">{getReviewsForDrama(selectedDrama.id).length}</span> reviews</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    {/* Description */}
+                    <section>
+                      <h3 className="text-lg font-semibold text-primary mb-2">Description</h3>
+                      <p className="text-muted-foreground leading-relaxed">
+                        {selectedDrama.description}
+                      </p>
+                    </section>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                      <Button 
+                        variant={user && isLiked(selectedDrama.id) ? "default" : "outline"}
+                        onClick={handleLike}
+                        disabled={!user}
+                        className={user && isLiked(selectedDrama.id) ? "bg-primary" : ""}
+                      >
+                        <Heart className={`mr-2 h-4 w-4 ${user && isLiked(selectedDrama.id) ? "fill-current" : ""}`} />
+                        {user && isLiked(selectedDrama.id) ? "Liked" : "Like"}
+                      </Button>
+                      {!user && (
+                        <span className="text-sm text-muted-foreground self-center">
+                          Login to like dramas
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Trailer Section */}
+                    <section>
+                      <h3 className="text-lg font-semibold text-primary mb-3">Trailer</h3>
+                      <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-black shadow-lg">
+                        <iframe
+                          src={selectedDrama.trailerUrl}
+                          title={`${selectedDrama.title} Trailer`}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          className="absolute inset-0 w-full h-full"
+                        />
+                      </div>
+                    </section>
+
+                    {/* Cast Section */}
+                    <section>
+                      <h3 className="text-lg font-semibold mb-4">Cast</h3>
+                      <div className="flex flex-wrap gap-6">
+                        {selectedDrama.cast.map((member, index) => (
+                          <div key={index} className="flex flex-col items-center text-center">
+                            <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-muted">
+                              <Image
+                                src={member.image}
+                                alt={member.name}
+                                width={64}
+                                height={64}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                            <p className="mt-2 font-medium text-sm">{member.name}</p>
+                            <p className="text-xs text-muted-foreground">{member.role}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+
+                    {/* User Reviews Section */}
+                    <section className="space-y-4">
+                      <h3 className="text-lg font-semibold">User Reviews</h3>
+                      
+                      {/* Form viết review của bạn (giữ nguyên logic) */}
+                      {user ? (
+                        <div className="mb-6 p-4 rounded-lg bg-muted/50 border border-border">
+                          {/* ... code form review của bạn ... */}
+                          <p className="font-medium mb-3">Write a Review</p>
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="flex gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button key={star} type="button" onClick={() => setUserRating(star)} className="transition-transform hover:scale-110">
+                                  <Star className={`h-6 w-6 ${(hoverRating || userRating) >= star ? "fill-yellow-500 text-yellow-500" : "text-muted-foreground"}`} />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <Textarea
+                            placeholder="Share your thoughts..."
+                            value={userComment}
+                            onChange={(e) => setUserComment(e.target.value)}
+                            className="mb-3 bg-input resize-none"
+                            rows={3}
+                          />
+                          <Button onClick={handleSubmitReview} disabled={!userComment.trim() || userRating === 0}>
+                            Submit Review
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground py-2 italic text-center border rounded-md">
+                          Login to write a review
+                        </div>
+                      )}
+
+                      {/* Reviews List */}
+                      <div className="space-y-4">
+                        {getReviewsForDrama(selectedDrama.id).map((review) => (
+                          <div key={review.id} className="flex gap-3 p-3 rounded-lg bg-muted/30">
+                            <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-muted">
+                              <Image src={review.avatar || ""} alt={review.username} width={40} height={40} className="h-full w-full object-cover" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm">{review.username}</p>
+                                <div className="flex items-center gap-1">
+                                  <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                                  <span className="text-xs text-yellow-500">{review.rating}/5</span>
+                                </div>
+                              </div>
+                              <p className="text-sm text-muted-foreground mt-1">{review.comment}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                    
+                    {/* Recommendation Section */}
+                    <section className="pt-6 border-t">
+                      <DramaCarousel
+                        title="Recommended Similar Dramas"
+                        dramas={allDramas.filter(d => d.id !== selectedDrama?.id).slice(0, 8)}
+                        onDramaClick={handleDramaClick}
+                      />
+                    </section>
                   </div>
                 </div>
-
-                {/* Similar Dramas */}
-                {/* <div>
-                  <h4 className="font-semibold mb-4">Recommended Similar Dramas</h4>
-                  <div className="grid grid-cols-4 gap-4">
-                    {allDramas.filter(d => d.id !== selectedDrama.id).slice(0, 4).map((drama) => (
-                      <div 
-                        key={drama.id} 
-                        className="relative aspect-[2/3] overflow-hidden rounded-lg cursor-pointer"
-                        onClick={() => handleDramaClick(drama)}
-                      >
-                        <Image
-                          src={drama.imageUrl}
-                          alt={drama.title}
-                          fill
-                          className="object-cover transition-all hover:scale-105"
-                        />
-                        <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/80 to-transparent p-2">
-                          <span className="text-xs font-medium text-white line-clamp-1">{drama.title}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div> */}
-                <DramaCarousel
-                  title="Recommended Similar Dramas"
-                  dramas={allDramas.filter(d => d.id !== selectedDrama?.id).slice(0, 8)}
-                  onDramaClick={handleDramaClick}
-                />
               </div>
-            </ScrollArea>
+                
+              </div>
           )}
         </DialogContent>
       </Dialog>

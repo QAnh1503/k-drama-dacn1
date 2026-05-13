@@ -4,6 +4,19 @@ import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import create_engine
+
+# URL kết nối dựa trên thông tin Hiền vừa cung cấp
+DATABASE_URL = "postgresql://postgres:123456@localhost:5432/kdrama"
+engine = create_engine(DATABASE_URL)
+
+def get_db_connection():
+    return psycopg2.connect(
+        host="localhost", 
+        database="kdrama", 
+        user="postgres", 
+        password="123456"
+    )
 
 app = FastAPI()
 
@@ -50,6 +63,32 @@ class MovieInput(BaseModel):
     start_year: int
     start_month: int
     age_rating: str
+
+# --- TẠO API LẤY DANH SÁCH GỢI Ý Ở TRANG PAGE.TSX (AUTOCOMPLETE) ---
+@app.get("/metadata")
+def get_metadata():
+    try:
+        # Sử dụng engine.connect() của SQLAlchemy để ổn định hơn với Pandas
+        with engine.connect() as connection:
+            # LƯU Ý: Kiểm tra lại tên cột trong PgAdmin (actor hay main_lead?)
+            # Dựa vào test_db.py, ta sẽ lấy đúng các bảng trong schema scoring_data
+            
+            actors_df = pd.read_sql_query("SELECT DISTINCT actor FROM scoring_data.actor_scores", connection)
+            directors_df = pd.read_sql_query("SELECT DISTINCT directors FROM scoring_data.director_scores", connection)
+            writers_df = pd.read_sql_query("SELECT DISTINCT screenwriters FROM scoring_data.writer_scores", connection)
+        
+        # In ra terminal để bạn kiểm tra xem có lấy được dữ liệu không
+        print(f"Loaded {len(actors_df)} actors, {len(directors_df)} directors")
+
+        return {
+            "actors": actors_df['actor'].dropna().tolist(),
+            "directors": directors_df['directors'].dropna().tolist(),
+            "screenwriters": writers_df['screenwriters'].dropna().tolist()
+        }
+    except Exception as e:
+        print(f"Metadata Error: {e}")
+        return {"error": str(e), "actors": [], "directors": [], "screenwriters": []}
+    
 
 # --- BƯỚC 4: LOGIC DỰ ĐOÁN ---
 @app.post("/predict")
@@ -125,9 +164,9 @@ async def predict_kdrama(data: MovieInput):
 
     # Xác định nhãn Popularity dựa trên mốc Threshold
     def get_status(rank):
-        if rank <= THRESHOLD_HOT: return "🔥 HOT (Cực kỳ phổ biến)"
-        if rank <= THRESHOLD_MEDIUM: return "📈 Trung bình"
-        return "☁️ Thấp"
+        if rank <= THRESHOLD_HOT: return "HOT (Cực kỳ phổ biến)"
+        if rank <= THRESHOLD_MEDIUM: return "Trung bình"
+        return "Thấp"
 
     return {
         "predicted_rating": round(float(res_rating), 2),
@@ -136,7 +175,7 @@ async def predict_kdrama(data: MovieInput):
         "popularity_level": get_status(rank_pop)
     }
 
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    
