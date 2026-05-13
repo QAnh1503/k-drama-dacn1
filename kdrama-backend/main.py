@@ -1,9 +1,16 @@
 import joblib
+from sqlalchemy import create_engine, text
 import pandas as pd
 import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from services.stats_service import get_db_stats # Import hàm từ file mới
+
+# Cấu hình kết nối Postgres
+# Format: postgresql://username:password@localhost:port/dbname
+DATABASE_URL = "postgresql://postgres:123456@localhost:5432/kdrama"
+engine = create_engine(DATABASE_URL)
 
 app = FastAPI()
 
@@ -15,14 +22,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- BƯỚC 1: ĐỊNH NGHĨA LẠI CÁC HÀM TIỀN XỬ LÝ (BẮT BUỘC) ---
+# --- ĐỊNH NGHĨA LẠI CÁC HÀM TIỀN XỬ LÝ (BẮT BUỘC) ---
 def my_tokenizer(text):
     return text.split()
 
 def clean_tags(text):
     return str(text).replace('(Vote tags)', '').replace(',', ' ')
 
-# --- BƯỚC 2: LOAD CÁC FILE .PKL ---
+# --- LOAD CÁC FILE .PKL ---
 # Đảm bảo bạn để các file này trong thư mục 'models'
 models_dict = joblib.load('models/models_ridge.pkl')
 mlb = joblib.load('models/mlb_genres.pkl')
@@ -35,7 +42,7 @@ feature_lists = joblib.load('models/feature_lists.pkl')  # Load danh sách cột
 THRESHOLD_HOT = 500  # Ví dụ: Hạng dưới 500 là HOT
 THRESHOLD_MEDIUM = 1500
 
-# --- BƯỚC 3: ĐỊNH NGHĨA SCHEMA DỮ LIỆU NHẬN TỪ REACT ---
+# --- ĐỊNH NGHĨA SCHEMA DỮ LIỆU NHẬN TỪ REACT ---
 class MovieInput(BaseModel):
     title: str
     main_lead1: str
@@ -51,7 +58,7 @@ class MovieInput(BaseModel):
     start_month: int
     age_rating: str
 
-# --- BƯỚC 4: LOGIC DỰ ĐOÁN ---
+# -------- TẠO API LOGIC DỰ ĐOÁN --------
 @app.post("/predict")
 async def predict_kdrama(data: MovieInput):
     # 1. Chuyển input về DataFrame
@@ -136,6 +143,126 @@ async def predict_kdrama(data: MovieInput):
         "popularity_level": get_status(rank_pop)
     }
 
+
+# -------- TẠO API THỐNG KÊ --------
+#     try:
+#         # 1. Lấy dữ liệu từ bảng public.dramas
+#         with engine.connect() as conn:
+#             # Query lấy các cột cần thiết cho thống kê
+#             query = text("SELECT rating, genres, original_network, start_year FROM public.dramas")
+#             df = pd.read_sql(query, conn)
+
+#         if df.empty:
+#             return {
+#                 "stats": [],
+#                 "ratingByGenre": [],
+#                 "ratingTrends": [],
+#                 "platformDistribution": [],
+#                 "predictionFactors": []
+#             }
+
+        
+#         # --- XỬ LÝ DỮ LIỆU CHO DASHBOARD ---
+
+#         # 1. State tổng quan: 4 con số tổng quan (Stats)
+#         total_dramas = len(df)
+#         avg_rating = round(df['rating'].mean(), 1)
+#         # Tách genre để đếm số lượng thể loại unique
+#         unique_genres = df['genres'].str.split(',').explode().str.strip().nunique()
+
+#         # 2. Rating theo Genre (Top 6)
+#         genre_df = df.assign(genre=df['genres'].str.split(',')).explode('genre')
+#         genre_df['genre'] = genre_df['genre'].str.strip()
+#         rating_by_genre = genre_df.groupby('genre')['rating'].mean().sort_values(ascending=False).head(6)
+        
+#         colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7"]
+#         rating_by_genre_data = [
+#             {"genre": g, "rating": round(r, 2), "fill": colors[i % len(colors)]}
+#             for i, (g, r) in enumerate(rating_by_genre.items())
+#         ]
+
+#         # 3. Xu hướng theo năm (Rating Trends) - Lấy 10 năm gần nhất
+#         yearly = df.groupby('start_year').agg({'rating': 'mean', 'genres': 'count'}).rename(columns={'genres': 'count'})
+#         yearly = yearly.sort_index().tail(10)
+#         rating_trends_data = [
+#             {"year": str(int(y)), "avgRating": round(r, 1), "releases": int(c)}
+#             for y, (r, c) in yearly.iterrows()
+#         ]
+
+#         # 4. Phân bổ Nền tảng (Platform Distribution - original_network) - Top 5
+#         platforms = df['original_network'].value_counts().head(5)
+#         platform_data = [
+#             {"name": n, "value": int(v), "color": colors[i % len(colors)]}
+#             for i, (n, v) in enumerate(platforms.items())
+#         ]
+
+#         # 5. Phân bổ điểm số (Rating Distribution)
+#         # Chia bins: 0-7, 7-8, 8-9, 9-10
+#         bins = [0, 7, 8, 9, 10]
+#         labels = ["< 7.0", "7.0-8.0", "8.0-9.0", "9.0-10"]
+#         df['rating_range'] = pd.cut(df['rating'], bins=bins, labels=labels)
+#         dist = df['rating_range'].value_counts().sort_index()
+#         rating_dist_data = [
+#             {"range": r, "count": int(c)} for r, c in dist.items()
+#         ]
+
+#         model_rating = models_dict['Rating']
+#         # Giả sử chúng ta muốn lấy top 5 đặc trưng ảnh hưởng nhất
+#         features = feature_lists['features_rating']
+#         importance = np.abs(model_rating.coef_) # Lấy trị tuyệt đối để xem mức độ ảnh hưởng
+
+#         # Tạo DataFrame để dễ sắp xếp
+#         # feat_importance = pd.DataFrame({'name': features, 'impact': importance})
+#         # feat_importance = feat_importance.sort_values(by='impact', ascending=False).head(5)
+#         # Tạo từ điển dịch tên cột cho đẹp
+#         name_map = {
+#             'main_lead1_score': 'Main Actor',
+#             'main_lead2_score': 'Supporting Actor',
+#             'directors_score': 'Director',
+#             'screenwriters_score': 'Screenwriter',
+#             'movie_age': 'Recency',
+#             'episodes': 'Total Episodes'
+#         }
+
+#         feat_importance = pd.DataFrame({'name': features, 'impact': importance})
+#         # Dịch tên nếu có trong map, nếu không giữ nguyên (và bỏ tiền tố genre_, tag_)
+#         feat_importance['name'] = feat_importance['name'].apply(
+#             lambda x: name_map.get(x, x.replace('genre_', '').replace('tag_', '').title())
+#         )
+#         feat_importance = feat_importance.sort_values(by='impact', ascending=False).head(5)
+
+#         # Chuẩn hóa về thang điểm 100 cho đẹp biểu đồ
+#         max_val = feat_importance['impact'].max()
+#         feat_importance['impact'] = (feat_importance['impact'] / max_val * 100).astype(int)
+
+#         prediction_factors_real = feat_importance.to_dict(orient='records')
+
+#         return {
+#             "stats": [
+#                 {"label": "Dramas Analyzed", "value": f"{total_dramas:,}", "color": "text-primary"},
+#                 {"label": "Average Rating", "value": str(avg_rating), "color": "text-yellow-500"},
+#                 {"label": "Prediction Accuracy", "value": "92%", "color": "text-green-500"},
+#                 {"label": "Genres Tracked", "value": str(unique_genres), "color": "text-foreground"},
+#             ],
+#             "ratingByGenre": rating_by_genre_data,
+#             "ratingTrends": rating_trends_data,
+#             "platformDistribution": platform_data,
+#             "ratingDistribution": rating_dist_data,
+#             "predictionFactors": prediction_factors_real
+#         }
+    
+#     except Exception as e:
+#         print(f"Lỗi DB: {e}")
+#         return {"error": str(e)}
+@app.get("/api/stats")
+async def get_stats_api():
+    # Gọi hàm xử lý từ file stats_service.py
+    data = get_db_stats(engine, models_dict, feature_lists)
+    
+    if data is None:
+        return {"error": "Could not fetch stats", "stats": []}
+        
+    return data
 
 if __name__ == "__main__":
     import uvicorn
