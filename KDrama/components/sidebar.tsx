@@ -35,9 +35,21 @@ export function Sidebar() {
     <TooltipProvider delayDuration={0}>
       <aside className="fixed left-0 top-0 z-50 flex h-full w-16 flex-col items-center bg-sidebar border-r border-sidebar-border py-4">
         {/* Logo */}
-        <Link href="/" className="mb-8">
+        {/* <Link href="/" className="mb-8">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
             KD
+          </div>
+        </Link> */}
+        {/* Logo */}
+        <Link href="/" className="mb-8">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden">
+            <Image
+              src="/logoKD.png" // Đường dẫn tính từ thư mục public
+              alt="K-Drama AI Logo"
+              width={40}
+              height={40}
+              className="h-full w-full object-contain"
+            />
           </div>
         </Link>
 
