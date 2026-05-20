@@ -2,12 +2,16 @@ import joblib
 from sqlalchemy import create_engine, text
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI
+import json
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import create_engine
+from typing import List, Optional  
 
-# URL kết nối dựa trên thông tin Hiền vừa cung cấp
+from services.stats_service import get_db_stats # Import hàm từ file mới
+from services.recommend_service import get_recommendations_for_user, update_user_profile # Import 2 hàm xử lý hệ thống khuyến nghị
+
+# Cấu hình kết nối Postgres
 DATABASE_URL = "postgresql://postgres:123456@localhost:5432/kdrama"
 engine = create_engine(DATABASE_URL)
 
@@ -19,13 +23,6 @@ def get_db_connection():
         password="123456"
     )
 
-from services.stats_service import get_db_stats # Import hàm từ file mới
-
-# Cấu hình kết nối Postgres
-# Format: postgresql://username:password@localhost:port/dbname
-DATABASE_URL = "postgresql://postgres:123456@localhost:5432/kdrama"
-engine = create_engine(DATABASE_URL)
-
 app = FastAPI()
 
 # Cấu hình CORS để Next.js gọi được API
@@ -36,7 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- ĐỊNH NGHĨA LẠI CÁC HÀM TIỀN XỬ LÝ (BẮT BUỘC) ---
+# --- ĐỊNH NGHĨA LẠI CÁC HÀM TIỀN XỬ LÝ (MÔ HÌNH RIDGE CŨ) ---
 def my_tokenizer(text):
     return text.split()
 
@@ -44,13 +41,13 @@ def clean_tags(text):
     return str(text).replace('(Vote tags)', '').replace(',', ' ')
 
 # --- LOAD CÁC FILE .PKL ---
-# Đảm bảo bạn để các file này trong thư mục 'models'
 models_dict = joblib.load('models/models_ridge.pkl')
 mlb = joblib.load('models/mlb_genres.pkl')
 tfidf_tag = joblib.load('models/tfidf_tag.pkl')
 tfidf_content = joblib.load('models/tfidf_content.pkl')
 encoding_maps = joblib.load('models/encoding_maps.pkl')
 feature_lists = joblib.load('models/feature_lists.pkl')  # Load danh sách cột để AI không bị "lẫn lộn"
+print("--- [STARTUP] Đã tải thành công toàn bộ file .pkl lên RAM! ---\n")
 
 # Các mốc Popularity (Bạn có thể lấy từ kết quả print ở Colab rồi điền số cứng vào đây)
 THRESHOLD_HOT = 500  # Ví dụ: Hạng dưới 500 là HOT
@@ -72,7 +69,30 @@ class MovieInput(BaseModel):
     start_month: int
     age_rating: str
 
-# --- TẠO API LẤY DANH SÁCH GỢI Ý Ở TRANG PAGE.TSX (AUTOCOMPLETE) ---
+# --- NEW ---
+# Schema mới: Nhận dữ liệu từ Form đăng ký (Onboarding)
+class OnboardingInput(BaseModel):
+    user_id: int
+    fav_genres: List[str]
+    fav_actors: List[str]
+    fav_tags: List[str]
+
+# Schema mới: Nhận dữ liệu khi user nhấn nút Yêu thích phim
+class FavoriteInput(BaseModel):
+    user_id: int
+    drama_id: int
+
+# Schema mới: Nhận dữ liệu khi user đánh giá và bình luận phim
+class CommentInput(BaseModel):
+    user_id: int
+    drama_id: int
+    rating: int  # Số sao người dùng chấm (1 -> 5)
+    content: str # Nội dung bằng chữ
+
+
+# -------------- 5. CÁC API ENDPOINTS --------------
+
+# -------- TẠO API LẤY DANH SÁCH metadata GỢI Ý Ở TRANG PAGE.TSX (AUTOCOMPLETE) --------
 @app.get("/metadata")
 def get_metadata():
     try:
@@ -88,6 +108,7 @@ def get_metadata():
         # In ra terminal để bạn kiểm tra xem có lấy được dữ liệu không
         print(f"Loaded {len(actors_df)} actors, {len(directors_df)} directors")
 
+        print(f"[METADATA] Đã load {len(actors_df)} diễn viên, {len(directors_df)} đạo diễn từ DB.")
         return {
             "actors": actors_df['actor'].dropna().tolist(),
             "directors": directors_df['directors'].dropna().tolist(),
@@ -96,6 +117,7 @@ def get_metadata():
     except Exception as e:
         print(f"Metadata Error: {e}")
         return {"error": str(e), "actors": [], "directors": [], "screenwriters": []}
+
 
 # -------- TẠO API LOGIC DỰ ĐOÁN --------
 @app.post("/predict")
@@ -175,6 +197,7 @@ async def predict_kdrama(data: MovieInput):
         if rank <= THRESHOLD_MEDIUM: return "Medium"
         return "Thấp"
 
+    print(f"[PREDICT RESULT] Rating: {round(float(res_rating), 2)}, Watchers: {int(res_watchers)}, Rank: {int(rank_pop)}")
     return {
         "predicted_rating": round(float(res_rating), 2),
         "predicted_watchers": int(res_watchers),
@@ -182,116 +205,8 @@ async def predict_kdrama(data: MovieInput):
         "popularity_level": get_status(rank_pop)
     }
 
-# -------- TẠO API THỐNG KÊ --------
-#     try:
-#         # 1. Lấy dữ liệu từ bảng public.dramas
-#         with engine.connect() as conn:
-#             # Query lấy các cột cần thiết cho thống kê
-#             query = text("SELECT rating, genres, original_network, start_year FROM public.dramas")
-#             df = pd.read_sql(query, conn)
 
-#         if df.empty:
-#             return {
-#                 "stats": [],
-#                 "ratingByGenre": [],
-#                 "ratingTrends": [],
-#                 "platformDistribution": [],
-#                 "predictionFactors": []
-#             }
-
-        
-#         # --- XỬ LÝ DỮ LIỆU CHO DASHBOARD ---
-
-#         # 1. State tổng quan: 4 con số tổng quan (Stats)
-#         total_dramas = len(df)
-#         avg_rating = round(df['rating'].mean(), 1)
-#         # Tách genre để đếm số lượng thể loại unique
-#         unique_genres = df['genres'].str.split(',').explode().str.strip().nunique()
-
-#         # 2. Rating theo Genre (Top 6)
-#         genre_df = df.assign(genre=df['genres'].str.split(',')).explode('genre')
-#         genre_df['genre'] = genre_df['genre'].str.strip()
-#         rating_by_genre = genre_df.groupby('genre')['rating'].mean().sort_values(ascending=False).head(6)
-        
-#         colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7"]
-#         rating_by_genre_data = [
-#             {"genre": g, "rating": round(r, 2), "fill": colors[i % len(colors)]}
-#             for i, (g, r) in enumerate(rating_by_genre.items())
-#         ]
-
-#         # 3. Xu hướng theo năm (Rating Trends) - Lấy 10 năm gần nhất
-#         yearly = df.groupby('start_year').agg({'rating': 'mean', 'genres': 'count'}).rename(columns={'genres': 'count'})
-#         yearly = yearly.sort_index().tail(10)
-#         rating_trends_data = [
-#             {"year": str(int(y)), "avgRating": round(r, 1), "releases": int(c)}
-#             for y, (r, c) in yearly.iterrows()
-#         ]
-
-#         # 4. Phân bổ Nền tảng (Platform Distribution - original_network) - Top 5
-#         platforms = df['original_network'].value_counts().head(5)
-#         platform_data = [
-#             {"name": n, "value": int(v), "color": colors[i % len(colors)]}
-#             for i, (n, v) in enumerate(platforms.items())
-#         ]
-
-#         # 5. Phân bổ điểm số (Rating Distribution)
-#         # Chia bins: 0-7, 7-8, 8-9, 9-10
-#         bins = [0, 7, 8, 9, 10]
-#         labels = ["< 7.0", "7.0-8.0", "8.0-9.0", "9.0-10"]
-#         df['rating_range'] = pd.cut(df['rating'], bins=bins, labels=labels)
-#         dist = df['rating_range'].value_counts().sort_index()
-#         rating_dist_data = [
-#             {"range": r, "count": int(c)} for r, c in dist.items()
-#         ]
-
-#         model_rating = models_dict['Rating']
-#         # Giả sử chúng ta muốn lấy top 5 đặc trưng ảnh hưởng nhất
-#         features = feature_lists['features_rating']
-#         importance = np.abs(model_rating.coef_) # Lấy trị tuyệt đối để xem mức độ ảnh hưởng
-
-#         # Tạo DataFrame để dễ sắp xếp
-#         # feat_importance = pd.DataFrame({'name': features, 'impact': importance})
-#         # feat_importance = feat_importance.sort_values(by='impact', ascending=False).head(5)
-#         # Tạo từ điển dịch tên cột cho đẹp
-#         name_map = {
-#             'main_lead1_score': 'Main Actor',
-#             'main_lead2_score': 'Supporting Actor',
-#             'directors_score': 'Director',
-#             'screenwriters_score': 'Screenwriter',
-#             'movie_age': 'Recency',
-#             'episodes': 'Total Episodes'
-#         }
-
-#         feat_importance = pd.DataFrame({'name': features, 'impact': importance})
-#         # Dịch tên nếu có trong map, nếu không giữ nguyên (và bỏ tiền tố genre_, tag_)
-#         feat_importance['name'] = feat_importance['name'].apply(
-#             lambda x: name_map.get(x, x.replace('genre_', '').replace('tag_', '').title())
-#         )
-#         feat_importance = feat_importance.sort_values(by='impact', ascending=False).head(5)
-
-#         # Chuẩn hóa về thang điểm 100 cho đẹp biểu đồ
-#         max_val = feat_importance['impact'].max()
-#         feat_importance['impact'] = (feat_importance['impact'] / max_val * 100).astype(int)
-
-#         prediction_factors_real = feat_importance.to_dict(orient='records')
-
-#         return {
-#             "stats": [
-#                 {"label": "Dramas Analyzed", "value": f"{total_dramas:,}", "color": "text-primary"},
-#                 {"label": "Average Rating", "value": str(avg_rating), "color": "text-yellow-500"},
-#                 {"label": "Prediction Accuracy", "value": "92%", "color": "text-green-500"},
-#                 {"label": "Genres Tracked", "value": str(unique_genres), "color": "text-foreground"},
-#             ],
-#             "ratingByGenre": rating_by_genre_data,
-#             "ratingTrends": rating_trends_data,
-#             "platformDistribution": platform_data,
-#             "ratingDistribution": rating_dist_data,
-#             "predictionFactors": prediction_factors_real
-#         }
-    
-#     except Exception as e:
-#         print(f"Lỗi DB: {e}")
-#         return {"error": str(e)}
+# -------- API Thống kê dữ liệu DB --------
 @app.get("/api/stats")
 async def get_stats_api():
     # Gọi hàm xử lý từ file stats_service.py
@@ -302,7 +217,144 @@ async def get_stats_api():
         
     return data
 
+
+    
+
+
+# =========================================================================
+# --- MỚI BỔ SUNG: CÁC API KẾT NỐI ĐẾN RECOMMEND_SERVICE ---
+# =========================================================================
+# API 1: Lưu form đăng ký (Onboarding) và thiết lập Vector sở thích ban đầu
+@app.post("/api/onboarding")
+async def save_onboarding(data: OnboardingInput):
+    print(f"\n[ONBOARDING] Tiếp nhận Form đăng ký từ User ID: {data.user_id}")
+    print(f" -> Thể loại chọn: {data.fav_genres}")
+    print(f" -> Diễn viên chọn: {data.fav_actors}")
+    print(f" -> Mô-típ chọn: {data.fav_tags}")
+    
+    try:
+        # Sử dụng engine.begin() để đảm bảo tính an toàn dữ liệu (Transaction)
+        with engine.begin() as connection:
+            # Bước A: Lưu mảng sở thích tĩnh vào bảng user_data.accounts
+            acc_query = text("""
+                UPDATE user_data.accounts 
+                SET fav_genres = :fav_genres, fav_actors = :fav_actors, fav_tags = :fav_tags 
+                WHERE user_id = :user_id
+            """)
+            connection.execute(acc_query, {
+                "fav_genres": data.fav_genres, 
+                "fav_actors": data.fav_actors, 
+                "fav_tags": data.fav_tags, 
+                "user_id": data.user_id
+            })
+            print(" -> Đã cập nhật xong dữ liệu vào bảng user_data.accounts.")
+            
+            # Bước B: Khởi tạo điểm số mặc định 1.0 cho các lựa chọn vào bảng user_profiles
+            genre_w = {g: 1.0 for g in data.fav_genres}
+            actor_w = {a: 1.0 for a in data.fav_actors}
+            tag_w = {t: 1.0 for t in data.fav_tags}
+            
+            prof_query = text("""
+                INSERT INTO user_data.user_profiles (user_id, genre_weights, actor_weights, tag_weights, updated_at)
+                VALUES (:user_id, :genre_w, :actor_w, :tag_w, NOW())
+                ON CONFLICT (user_id) DO UPDATE
+                SET genre_weights = EXCLUDED.genre_weights,
+                    actor_weights = EXCLUDED.actor_weights,
+                    tag_weights = EXCLUDED.tag_weights,
+                    updated_at = NOW();
+            """)
+            connection.execute(prof_query, {
+                "user_id": data.user_id, 
+                "genre_w": json.dumps(genre_w),
+                "actor_w": json.dumps(actor_w), 
+                "tag_w": json.dumps(tag_w)
+            })
+            print(" -> Đã khởi tạo Vector Trọng số thành công tại bảng user_data.user_profiles.")
+            
+        return {"status": "success", "message": "Onboarding completed and user profile initialized!"}
+    except Exception as e:
+        print(f"[ONBOARDING ERROR] Lỗi: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# API 2: Lấy danh sách phim gợi ý cá nhân hóa cho Trang chủ
+@app.get("/api/recommendations/{user_id}")
+async def get_recommendations(user_id: int, top_n: int = 10):
+    print(f"\n[RECOMMENDATION] Nhận yêu cầu tải danh sách gợi ý cho User ID: {user_id}")
+    
+    # Gọi hàm xử lý tính điểm toán học từ file recommend_service.py của bạn
+    recs = get_recommendations_for_user(user_id, engine, top_n=top_n)
+    
+    if recs is None:
+        print(f" -> Lỗi khi xử lý thuật toán gợi ý phim cho user {user_id}")
+        raise HTTPException(status_code=500, detail="Error generating recommendations")
+        
+    print(f" -> Thuật toán chạy xong. Đã lọc ra Top {len(recs)} bộ phim tốt nhất cho người dùng này.")
+    # In thử 3 bộ phim đầu tiên ra terminal để kiểm tra kết quả ngay lập tức
+    if len(recs) > 0:
+        print(f" -> Phim gợi ý tiêu biểu: {recs[:3]}")
+        
+    return {"user_id": user_id, "recommendations": recs}
+
+
+# API 3: Người dùng nhấn nút Yêu thích phim (Thêm vào Favorite)
+@app.post("/api/favorites")
+async def add_favorite(data: FavoriteInput):
+    print(f"\n[FAVORITE CHOSEN] Người dùng {data.user_id} vừa nhấn THÍCH bộ phim có ID: {data.drama_id}")
+    try:
+        with engine.begin() as connection:
+            # Bước A: Lưu hành động vào lịch sử bảng favorites
+            fav_query = text("""
+                INSERT INTO user_data.favorites (user_id, drama_id, created_at)
+                VALUES (:user_id, :drama_id, NOW())
+            """)
+            connection.execute(fav_query, {"user_id": data.user_id, "drama_id": data.drama_id})
+            print(" -> Đã ghi nhận lịch sử vào bảng user_data.favorites.")
+        
+        # Bước B: Gọi hàm từ recommend_service để tự động cộng +5 điểm cho các thuộc tính của phim này
+        success = update_user_profile(data.user_id, data.drama_id, action_type='favorite', rating_val=None, engine=engine)
+        if success:
+            print(" -> Vector sở thích (User Profile Weights) của người dùng đã được cộng điểm.")
+        
+        return {"status": "success", "message": "Added to favorites and profile learning updated"}
+    except Exception as e:
+        print(f"[FAVORITE ERROR] Lỗi: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# API 4: Người dùng viết bình luận và chấm sao (Comment & Rating)
+@app.post("/api/comments")
+async def add_comment(data: CommentInput):
+    print(f"\n[COMMENT & RATING] Người dùng {data.user_id} đánh giá phim ID: {data.drama_id} với {data.rating} SAO.")
+    print(f" -> Nội dung bình luận: '{data.content}'")
+    try:
+        with engine.begin() as connection:
+            # Bước A: Ghi nhận thông tin vào bảng comments
+            cmt_query = text("""
+                INSERT INTO user_data.comments (user_id, drama_id, rating, content, created_at)
+                VALUES (:user_id, :drama_id, :rating, :content, NOW())
+            """)
+            connection.execute(cmt_query, {
+                "user_id": data.user_id, 
+                "drama_id": data.drama_id, 
+                "rating": data.rating, 
+                "content": data.content
+            })
+            print(" -> Đã lưu đánh giá vào bảng user_data.comments.")
+            
+        # Bước B: Gọi hàm cập nhật điểm trọng số của phim dựa trên số sao thực tế (Khen cộng điểm, Chê trừ điểm)
+        success = update_user_profile(data.user_id, data.drama_id, action_type='comment', rating_val=data.rating, engine=engine)
+        if success:
+            print(f" -> Đã điều chỉnh Vector trọng số của người dùng dựa trên mức {data.rating} sao.")
+            
+        return {"status": "success", "message": "Comment and rating saved successfully"}
+    except Exception as e:
+        print(f"[COMMENT ERROR] Lỗi: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
+    # Chạy uvicorn server tại cổng 8000
+    print("\n--- Khởi động Uvicorn Server tại http://localhost:8000 ---")
     uvicorn.run(app, host="0.0.0.0", port=8000)
-    
