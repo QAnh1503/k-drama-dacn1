@@ -29,6 +29,7 @@ def get_recommendations_for_user(user_id, engine, top_n=10):
                     LIMIT :limit
                 """)
                 result = connection.execute(fallback_query, {"limit": top_n}).mappings().all()
+            
                 return [dict(row) for row in result]
                 
             # Đọc ma trận trọng số sở thích của người dùng (nếu có)
@@ -66,6 +67,8 @@ def get_recommendations_for_user(user_id, engine, top_n=10):
                     for t in tags_list:
                         score += tag_w.get(t, 0.0)
                         
+              
+
                 recommendation_list.append({
                     "drama_id": drama["drama_id"],
                     "title": drama["title"],

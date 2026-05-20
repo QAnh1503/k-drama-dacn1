@@ -40,7 +40,7 @@ def my_tokenizer(text):
 def clean_tags(text):
     return str(text).replace('(Vote tags)', '').replace(',', ' ')
 
-# --- LOAD CÁC FILE .PKL ---
+# --- LOAD CÁC FILE .PKL -
 models_dict = joblib.load('models/models_ridge.pkl')
 mlb = joblib.load('models/mlb_genres.pkl')
 tfidf_tag = joblib.load('models/tfidf_tag.pkl')
