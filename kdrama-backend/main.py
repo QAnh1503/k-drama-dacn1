@@ -1,15 +1,6 @@
-import joblib
-from sqlalchemy import create_engine, text
-import pandas as pd
-import numpy as np
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from sqlalchemy import create_engine
+"""Backward-compatible entrypoint for `uvicorn main:app`."""
 
-# URL kết nối dựa trên thông tin Hiền vừa cung cấp
-DATABASE_URL = "postgresql://postgres:123456@localhost:5432/kdrama"
-engine = create_engine(DATABASE_URL)
+from app.main import app
 
 def get_db_connection():
     return psycopg2.connect(
@@ -306,5 +297,5 @@ async def get_stats_api():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-    
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
