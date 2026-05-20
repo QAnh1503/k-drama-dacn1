@@ -37,9 +37,6 @@ app.add_middleware(
 )
 
 # --- ĐỊNH NGHĨA LẠI CÁC HÀM TIỀN XỬ LÝ (BẮT BUỘC) ---
-def my_tokenizer(text):
-    return text.split()
-
 def clean_tags(text):
     return str(text).replace('(Vote tags)', '').replace(',', ' ')
 
@@ -47,10 +44,15 @@ def clean_tags(text):
 # Đảm bảo bạn để các file này trong thư mục 'models'
 models_dict = joblib.load('models/models_ridge.pkl')
 mlb = joblib.load('models/mlb_genres.pkl')
+
+import sys
+def my_tokenizer(text): return text.split()
+sys.modules['__main__'].my_tokenizer = my_tokenizer
+
 tfidf_tag = joblib.load('models/tfidf_tag.pkl')
 tfidf_content = joblib.load('models/tfidf_content.pkl')
 encoding_maps = joblib.load('models/encoding_maps.pkl')
-feature_lists = joblib.load('models/feature_lists.pkl')  # Load danh sách cột để AI không bị "lẫn lộn"
+feature_lists = joblib.load('models/feature_lists.pkl')
 
 # Các mốc Popularity (Bạn có thể lấy từ kết quả print ở Colab rồi điền số cứng vào đây)
 THRESHOLD_HOT = 500  # Ví dụ: Hạng dưới 500 là HOT
